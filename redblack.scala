@@ -26,7 +26,8 @@ abstract class RedBlackTest extends Properties("RedBlack") {
       value(Empty)
     } else {
       for {
-        tryRed <- choose(0, 2).sample.get % 2 == 0 // work around arbitrary[Boolean] bug
+        oddOrEven <- choose(0, 2)
+        tryRed = oddOrEven.sample.get % 2 == 0 // work around arbitrary[Boolean] bug
         isRed = parentIsBlack && tryRed
         nextLevel = if (isRed) level else level - 1
         left <- mkTree(nextLevel, !isRed, label + "L")
@@ -73,42 +74,8 @@ abstract class RedBlackTest extends Properties("RedBlack") {
       )
   }
   
-  def orderIsPreserved[A](t: Tree[A]): Boolean = t match {
-    case Empty => true
-    case ne: NonEmpty[_] =>
-      (
-        (ne.left.iterator map (_._1) forall (isSmaller(_, ne.key)))
-        && (ne.right.iterator map (_._1) forall (isSmaller(ne.key, _)))
-        && (List(ne.left, ne.right) forall orderIsPreserved)
-      )
-  }
-  
-  def setup(l: List[Int], invariant: Tree[Unit] => Boolean): (Boolean, Tree[Unit])
-
-  def listNoRepetitions(size: Int) = for {
-    s <- Gen.choose(1, size)
-    l <- Gen.listOfN(size, Gen.choose(0, Int.MaxValue)) suchThat (l => l.size == l.distinct.size)
-  } yield l 
-  def listFewRepetitions(size: Int) = for {
-    s <- Gen.choose(1, size)
-    l <- Gen.listOfN(s, Gen.choose(0, size * 4)) suchThat (l => l.size != l.distinct.size)
-  } yield l
-  def listManyRepetitions(size: Int) =  for {
-    s <- Gen.choose(1, size)
-    l <- Gen.listOfN(s, Gen.choose(0, size)) suchThat (l => l.size != l.distinct.size)
-  } yield l
-  def listEvenRepetitions(size: Int) = listFewRepetitions(size) map (x => 
-    scala.util.Random.shuffle(x zip x flatMap { case (a, b) => List(a, b) })
-  )
-  
-  // Arbitrarily weighted list distribution types
-  val seqType: Gen[Int => Gen[List[Int]]]
-  
-  def myGen(sized: Int) = for {
-    size <- Gen.choose(0, sized)
-    seq <- seqType
-    list <- seq(size)
-  } yield list
+  def orderIsPreserved[A](t: Tree[A]): Boolean = 
+    t.iterator zip t.iterator.drop(1) forall { case (x, y) => isSmaller(x._1, y._1) }
   
   property("root is black") = forAll(myGen(10)) { l => 
     setup(l, rootIsBlack)._1 :| setup(l, rootIsBlack)._2.toString
