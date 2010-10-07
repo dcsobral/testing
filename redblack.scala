@@ -15,11 +15,34 @@ Every simple path from a given node to any of its descendant leaves contains the
 */
 
 abstract class RedBlackTest extends Properties("RedBlack") {
-  object RedBlackTest extends scala.collection.immutable.RedBlack[Int] {
-    def isSmaller(x: Int, y: Int) = x < y
+  object RedBlackTest extends scala.collection.immutable.RedBlack[String] {
+    def isSmaller(x: String, y: String) = x < y
   }
   
   import RedBlackTest._
+  
+  def mkTree(level: Int, parentIsBlack: Boolean = false, label: String = ""): Gen[Tree[Unit]] = 
+    if (level == 0) {
+      value(Empty)
+    } else {
+      for {
+        tryRed <- choose(0, 2).sample.get % 2 == 0 // work around arbitrary[Boolean] bug
+        isRed = parentIsBlack && tryRed
+        nextLevel = if (isRed) level else level - 1
+        left <- mkTree(nextLevel, !isRed, label + "L")
+        right <- mkTree(nextLevel, !isRed, label + "R")
+      } yield {
+        if (isRed) 
+          RedTree(label + "N Red", (), left, right)
+        else
+          BlackTree(label + "N Black", (), left, right)
+      }
+    }
+
+  def genTree = for {
+    depth <- choose(0, 9)
+    tree <- mkTree(depth)
+  } yield tree
   
   def rootIsBlack[A](t: Tree[A]) = t.isBlack
   
