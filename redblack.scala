@@ -15,6 +15,9 @@ Every simple path from a given node to any of its descendant leaves contains the
 */
 
 abstract class RedBlackTest extends Properties("RedBlack") {
+  def minimumSize = 0
+  def maximumSize = 8
+
   object RedBlackTest extends scala.collection.immutable.RedBlack[String] {
     def isSmaller(x: String, y: String) = x < y
   }
@@ -47,14 +50,12 @@ abstract class RedBlackTest extends Properties("RedBlack") {
       }
     }
 
-  def minimumSize = 0
-  def maximumSize = 8
   def genTree = for {
     depth <- choose(minimumSize, maximumSize + 1)
     tree <- mkTree(depth)
   } yield tree
   
-  type ModifyParm = Int
+  type ModifyParm
   def genParm(tree: Tree[Int]): Gen[ModifyParm]
   def modify(tree: Tree[Int], parm: ModifyParm): Tree[Int]
   
@@ -62,7 +63,13 @@ abstract class RedBlackTest extends Properties("RedBlack") {
     tree <- genTree
     parm <- genParm(tree)
   } yield (tree, parm, modify(tree, parm))
+}
+
+trait RedBlackInvariants {
+  self: RedBlackTest =>
   
+  import RedBlackTest._
+    
   def rootIsBlack[A](t: Tree[A]) = t.isBlack
   
   def areAllLeavesBlack[A](t: Tree[A]): Boolean = t match {
@@ -106,9 +113,10 @@ abstract class RedBlackTest extends Properties("RedBlack") {
   property("Ordering of keys is preserved") = setup(orderIsPreserved)
 }
 
-object TestInsert extends RedBlackTest {
+object TestInsert extends RedBlackTest with RedBlackInvariants {
   import RedBlackTest._
   
+  override type ModifyParm = Int
   override def genParm(tree: Tree[Int]): Gen[ModifyParm] = choose(0, tree.iterator.size + 1)
   override def modify(tree: Tree[Int], parm: ModifyParm): Tree[Int] = tree update (generateKey(tree, parm), 0)
 
@@ -130,6 +138,7 @@ object TestModify extends RedBlackTest {
   
   def newValue = 1
   override def minimumSize = 1
+  override type ModifyParm = Int
   override def genParm(tree: Tree[Int]): Gen[ModifyParm] = choose(0, tree.iterator.size)
   override def modify(tree: Tree[Int], parm: ModifyParm): Tree[Int] = nodeAt(tree, parm) map { 
     case (key, _) => tree update (key, newValue)
@@ -142,50 +151,57 @@ object TestModify extends RedBlackTest {
   }
 }
 
-object TestDeletion extends RedBlackTest {
+object TestDelete extends RedBlackTest with RedBlackInvariants  {
   import RedBlackTest._
 
   override def minimumSize = 1
+  override type ModifyParm = Int
   override def genParm(tree: Tree[Int]): Gen[ModifyParm] = choose(0, tree.iterator.size)
   override def modify(tree: Tree[Int], parm: ModifyParm): Tree[Int] = nodeAt(tree, parm) map { 
     case (key, _) => tree delete key
   } getOrElse tree
   
   property("delete removes elements") = forAll(genInput) { case (tree, parm, newTree) =>
-    treeContains(newTree
-
-    forAll(myGen(50)) { l =>
-    val tree = l.foldLeft(Empty: Tree[Int])((acc, n) => acc update (n, ()))
-    forAll(Gen.choose(1, l.size)) { numberOfElementsToRemove =>
-      forAll(Gen.pick(numberOfElementsToRemove, l)) { elementsToRemove =>
-        val newTree = elementsToRemove.foldLeft(tree)((acc, n) => acc delete n)
-        (elementsToRemove forall (n => newTree lookup n isEmpty)) :| "Tree: "+tree+"New Tree: "+newTree+" Elements to Remove: "+elementsToRemove 
-      }
+    nodeAt(tree, parm) forall { case (key, _) =>
+      !treeContains(newTree, key)
     }
   }
 }
 
-object TestRange extends RedBlackTest {
+object TestRange extends RedBlackTest with RedBlackInvariants  {
   import RedBlackTest._
-  override val seqType = Gen.frequency(
-    (2, listFewRepetitions _),
-    (3, listManyRepetitions _),
-    (1, listEvenRepetitions _)
-  )
   
-  override def setup(l: List[Int], invariant: Tree[Int] => Boolean) = {
-    val (from, to, rest) = l.size match {
-      case 0 => (None, None, Nil)
-      case 1 => (Some(l.head), None, Nil)
-      case _ => val f :: t :: r = l; (Some(f), Some(t), r)
-    }
-    val (flag, tree) = rest.foldLeft((true, Empty: Tree[Int])) { 
-      case ((true, acc), n) => 
-        val newRoot = if (acc lookup n isEmpty) acc update (n, ()) else acc delete n
-        (invariant(newRoot range (from, to)), newRoot)
-      case (failed, _) => failed
-    }
-    (flag && invariant(tree range (from, to)), tree)
+  override def maximumSize = 7
+  override type ModifyParm = (Option[Int], Option[Int])
+  override def genParm(tree: Tree[Int]): Gen[ModifyParm] = for {
+    from <- choose(0, tree.iterator.size)
+    to <- choose(0, tree.iterator.size) suchThat (from <=)
+    optionalFrom <- oneOf(Some(from), None, Some(from)) // Double Some(n) to get around a bug
+    optionalTo <- oneOf(Some(to), None, Some(to)) // Double Some(n) to get around a bug
+  } yield (optionalFrom, optionalTo)
+  
+  override def modify(tree: Tree[Int], parm: ModifyParm): Tree[Int] = {
+    val from = parm._1 flatMap (nodeAt(tree, _) map (_._1))
+    val to = parm._2 flatMap (nodeAt(tree, _) map (_._1))
+    tree range (from, to)
+  }
+  
+  property("range boundaries respected") = forAll(genInput) { case (tree, parm, newTree) =>
+    val from = parm._1 flatMap (nodeAt(tree, _) map (_._1))
+    val to = parm._2 flatMap (nodeAt(tree, _) map (_._1))
+    ("lower boundary" |: (from forall ( key => newTree.iterator.map(_._1) forall (key <=)))) &&
+    ("upper boundary" |: (to forall ( key => newTree.iterator.map(_._1) forall (key >))))
+  }
+  
+  property("range returns all elements") = forAll(genInput) { case (tree, parm, newTree) =>
+    val from = parm._1 flatMap (nodeAt(tree, _) map (_._1))
+    val to = parm._2 flatMap (nodeAt(tree, _) map (_._1))
+    val filteredTree = tree.iterator
+      .map(_._1) 
+      .filter(key => from forall (key >=))
+      .filter(key => to forall (key <))
+      .toList
+    filteredTree == newTree.iterator.map(_._1).toList
   }
 }
 
