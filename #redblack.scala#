@@ -49,6 +49,7 @@ abstract class RedBlackTest extends Properties("RedBlack") {
   type ModifyParm = Int
   def genParm(tree: Tree[Unit]): Gen[ModifyParm]
   def modify(tree: Tree[Unit], parm: ModifyParm): Tree[DestType]
+  
   def genInput: Gen[(Tree[Unit], ModifyParm, Tree[DestType])] = for {
     tree <- genTree
     parm <- genParm(tree)
