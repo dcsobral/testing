@@ -16,7 +16,7 @@ Every simple path from a given node to any of its descendant leaves contains the
 
 abstract class RedBlackTest extends Properties("RedBlack") {
   def minimumSize = 0
-  def maximumSize = 8
+  def maximumSize = 7
 
   object RedBlackTest extends scala.collection.immutable.RedBlack[String] {
     def isSmaller(x: String, y: String) = x < y
@@ -44,9 +44,9 @@ abstract class RedBlackTest extends Properties("RedBlack") {
         right <- mkTree(nextLevel, !isRed, label + "R")
       } yield {
         if (isRed) 
-          RedTree(label + "N Red", 0, left, right)
+          RedTree(label + "N", 0, left, right)
         else
-          BlackTree(label + "N Black", 0, left, right)
+          BlackTree(label + "N", 0, left, right)
       }
     }
 
@@ -171,7 +171,6 @@ object TestDelete extends RedBlackTest with RedBlackInvariants  {
 object TestRange extends RedBlackTest with RedBlackInvariants  {
   import RedBlackTest._
   
-  override def maximumSize = 7
   override type ModifyParm = (Option[Int], Option[Int])
   override def genParm(tree: Tree[Int]): Gen[ModifyParm] = for {
     from <- choose(0, tree.iterator.size)
@@ -196,11 +195,11 @@ object TestRange extends RedBlackTest with RedBlackInvariants  {
   property("range returns all elements") = forAll(genInput) { case (tree, parm, newTree) =>
     val from = parm._1 flatMap (nodeAt(tree, _) map (_._1))
     val to = parm._2 flatMap (nodeAt(tree, _) map (_._1))
-    val filteredTree = tree.iterator
+    val filteredTree = (tree.iterator
       .map(_._1) 
       .filter(key => from forall (key >=))
       .filter(key => to forall (key <))
-      .toList
+      .toList)
     filteredTree == newTree.iterator.map(_._1).toList
   }
 }
