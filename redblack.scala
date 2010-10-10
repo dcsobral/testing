@@ -21,7 +21,7 @@ abstract class RedBlackTest extends Properties("RedBlack") {
   object RedBlackTest extends scala.collection.immutable.RedBlack[String] {
     def isSmaller(x: String, y: String) = x < y
   }
-  
+
   import RedBlackTest._
   
   def nodeAt[A](tree: Tree[A], n: Int): Option[(String, A)] = if (n < tree.iterator.size && n >= 0)
@@ -170,7 +170,7 @@ object TestDelete extends RedBlackTest with RedBlackInvariants  {
 
 object TestRange extends RedBlackTest with RedBlackInvariants  {
   import RedBlackTest._
-  
+
   override type ModifyParm = (Option[Int], Option[Int])
   override def genParm(tree: Tree[Int]): Gen[ModifyParm] = for {
     from <- choose(0, tree.iterator.size)
@@ -181,24 +181,24 @@ object TestRange extends RedBlackTest with RedBlackInvariants  {
   
   override def modify(tree: Tree[Int], parm: ModifyParm): Tree[Int] = {
     val from = parm._1 flatMap (nodeAt(tree, _) map (_._1))
-    val to = parm._2 flatMap (nodeAt(tree, _) map (_._1))
-    tree range (from, to)
+    val until = parm._2 flatMap (nodeAt(tree, _) map (_._1))
+    tree range (from, until)
   }
   
   property("range boundaries respected") = forAll(genInput) { case (tree, parm, newTree) =>
     val from = parm._1 flatMap (nodeAt(tree, _) map (_._1))
-    val to = parm._2 flatMap (nodeAt(tree, _) map (_._1))
+    val until = parm._2 flatMap (nodeAt(tree, _) map (_._1))
     ("lower boundary" |: (from forall ( key => newTree.iterator.map(_._1) forall (key <=)))) &&
-    ("upper boundary" |: (to forall ( key => newTree.iterator.map(_._1) forall (key >))))
+    ("upper boundary" |: (until forall ( key => newTree.iterator.map(_._1) forall (key >))))
   }
   
   property("range returns all elements") = forAll(genInput) { case (tree, parm, newTree) =>
     val from = parm._1 flatMap (nodeAt(tree, _) map (_._1))
-    val to = parm._2 flatMap (nodeAt(tree, _) map (_._1))
+    val until = parm._2 flatMap (nodeAt(tree, _) map (_._1))
     val filteredTree = (tree.iterator
       .map(_._1) 
       .filter(key => from forall (key >=))
-      .filter(key => to forall (key <))
+      .filter(key => until forall (key <))
       .toList)
     filteredTree == newTree.iterator.map(_._1).toList
   }
