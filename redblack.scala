@@ -204,10 +204,55 @@ object TestRange extends RedBlackTest with RedBlackInvariants  {
   }
 }
 
+object TestRangeNonKey extends RedBlackTest with RedBlackInvariants  {
+  import RedBlackTest._
+
+  override type ModifyParm = (Option[Int], Option[Int])
+  override def genParm(tree: Tree[Int]): Gen[ModifyParm] = for {
+    from <- choose(0, tree.iterator.size + 1)
+    to <- choose(0, tree.iterator.size + 1) suchThat (from <=)
+    optionalFrom <- oneOf(Some(from), None, Some(from)) // Double Some(n) to get around a bug
+    optionalTo <- oneOf(Some(to), None, Some(to)) // Double Some(n) to get around a bug
+  } yield (optionalFrom, optionalTo)
+  
+  override def modify(tree: Tree[Int], parm: ModifyParm): Tree[Int] = {
+    val from = parm._1 map (generateKey(tree, _))
+    val until = parm._2 map (generateKey(tree, _))
+    tree range (from, until)
+  }
+  
+  def generateKey(tree: Tree[Int], parm: Int): String = nodeAt(tree, parm) match {
+    case Some((key, _)) => key.init.mkString + "MN"
+    case None => nodeAt(tree, parm - 1) match {
+      case Some((key, _)) => key.init.mkString + "RN"
+      case None  => "N"
+    }
+  }
+
+  property("range boundaries respected") = forAll(genInput) { case (tree, parm, newTree) =>
+    val from = parm._1 map (generateKey(tree, _))
+    val until = parm._2 map (generateKey(tree, _))
+    ("lower boundary" |: (from forall ( key => newTree.iterator.map(_._1) forall (key <=)))) &&
+    ("upper boundary" |: (until forall ( key => newTree.iterator.map(_._1) forall (key >))))
+  }
+  
+  property("range returns all elements") = forAll(genInput) { case (tree, parm, newTree) =>
+    val from = parm._1 map (generateKey(tree, _))
+    val until = parm._2 map (generateKey(tree, _))
+    val filteredTree = (tree.iterator
+      .map(_._1) 
+      .filter(key => from forall (key >=))
+      .filter(key => until forall (key <))
+      .toList)
+    filteredTree == newTree.iterator.map(_._1).toList
+  }
+}
+
 object Test extends Properties("RedBlack") {
   include(TestInsert)
   include(TestModify)
   include(TestDelete)
   include(TestRange)
+  include(TestRangeNonKey)
 }
 
